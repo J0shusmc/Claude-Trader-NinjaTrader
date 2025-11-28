@@ -1,0 +1,35 @@
+{
+  "current_bar_index": 10,
+  "overall_bias": "bullish",
+  "waiting_for": "SETUP SIGNIFICANTLY IMPROVED - PRICE SURGED INTO ENTRY ZONE: Price rallied +66.00 points (25415.50 to 25481.50), moving dramatically closer to LONG entry zone. Distance decreased from 93.75 points to just 27.75 points. Price now within striking distance of bearish FVG at 25509-25550. Monitoring for final push into entry zone at 25512.00.",
+  "long_assessment": {
+    "status": "waiting",
+    "target_fvg": {
+      "zone_start": 25509.25,
+      "zone_end": 25550.5,
+      "size": 41.25,
+      "distance": 27.75,
+      "age": 0
+    },
+    "entry_plan": 25512.0,
+    "stop_plan": 25465.0,
+    "target_plan": 25545.0,
+    "risk_reward": 1.7,
+    "confidence": 0.82,
+    "reasoning": "SETUP SIGNIFICANTLY IMPROVED - STRONG MOMENTUM SURGE (Age: 5 bars): Price exploded +66.00 points this bar, closing at 25481.50 and dramatically reducing distance to entry zone from 93.75 to just 27.75 points. This is exactly the price action we were waiting for! Entry remains at 25512.00 (just above FVG lower bound at 25509.25) - now only 30.50 points away. Stop at 25465.00 provides 47pt buffer below entry. Target 25545.00 for 33pt gain = 1.70 R/R (well above 1.3:1 minimum). Stochastic increased from 69.06 to 75.17 (+6.11), confirming building momentum though approaching overbought territory. Strong uptrend structure remains intact (EMA21 > EMA75 > EMA150). EMA21 rose from 25335.43 to 25349.21 (+13.78), showing trend acceleration. FVG remains fresh (0 age bars). The +66 point surge validates our patience - price is now positioned for final push into entry zone. CONFIDENCE INCREASED from 0.68 to 0.82 due to strong momentum confirmation and proximity to entry. CONTINUING TO WAIT for price to reach 25512.00 entry level - we're very close now. This is a high-quality setup developing exactly as anticipated. Next bar could trigger entry if momentum continues.",
+    "setup_age_bars": 5
+  },
+  "short_assessment": {
+    "status": "none",
+    "target_fvg": null,
+    "entry_plan": null,
+    "stop_plan": null,
+    "target_plan": null,
+    "risk_reward": null,
+    "confidence": 0.0,
+    "reasoning": "NO SHORT SETUP: Price at 25481.50 is 157.25 points ABOVE the bullish FVG (25303.00-25324.25). Price just surged +66.00 points, showing strong bullish momentum - completely contradicts SHORT thesis. Strong uptrend structure remains intact (EMA21 > EMA75 > EMA150) with EMA21 accelerating higher (+13.78 points). Stochastic at 75.17 shows building bullish momentum, not bearish. Price would need to drop 157+ points to reach the bullish FVG zone for SHORT consideration. The powerful rally this bar reinforces bullish bias and eliminates any SHORT consideration. No valid SHORT opportunity exists."
+  },
+  "bars_since_last_update": 0,
+  "bars_since_last_trade": 10,
+  "last_updated": "2025-11-28T12:00:30.312047"
+}

@@ -1,0 +1,38 @@
+{
+  "trading_params": {
+    "min_gap_size": 5.0,
+    "max_gap_age_bars": 1000,
+    "min_risk_reward": 1.3,
+    "confidence_threshold": 0.65,
+    "position_size": 1
+  },
+  "risk_management": {
+    "stop_loss_min": 20,
+    "stop_loss_default": 40,
+    "stop_loss_max": 100,
+    "stop_buffer": 10,
+    "max_daily_trades": 5,
+    "max_daily_loss": 100,
+    "max_consecutive_losses": 3
+  },
+  "levels": {
+    "psychological_intervals": [1000],
+    "confluence_tolerance": 10.0,
+    "track_historical_strength": true
+  },
+  "memory": {
+    "max_trades_stored": 1000,
+    "query_similar_count": 20,
+    "enable_adaptive_learning": true
+  },
+  "claude": {
+    "model": "claude-sonnet-4-5-20250929",
+    "temperature": 0.3,
+    "max_tokens": 2000
+  },
+  "logging": {
+    "level": "INFO",
+    "log_file": "logs/trading_agent.log",
+    "enable_console": true
+  }
+}

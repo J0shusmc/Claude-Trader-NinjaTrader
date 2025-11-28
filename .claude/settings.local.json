@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(tree:*)",
+      "Bash(nul)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(python fvg_bot.py:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)",
+      "Bash(git init:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-flow",
+    "ruv-swarm"
+  ]
+}
