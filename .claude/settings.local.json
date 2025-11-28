@@ -12,7 +12,8 @@
       "Bash(python fvg_bot.py:*)",
       "Bash(python:*)",
       "Bash(cat:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(gh repo create:*)"
     ],
     "deny": [],
     "ask": []
