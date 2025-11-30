@@ -1,10 +1,27 @@
-# MNQ Claude Trading Bot - Dependencies
+# Claude Trading System - Enterprise Dependencies
 
-# Core dependencies
-anthropic>=0.40.0          # Claude AI API
-pandas>=2.0.0              # Data manipulation
-numpy>=1.24.0              # Numerical computations
-python-dotenv>=1.0.0       # Environment variable management
+# Core AI
+anthropic>=0.40.0
 
-# Additional dependencies for trading system
-typing-extensions>=4.0.0   # Type hints support
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Type Hints
+typing-extensions>=4.0.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code Quality (development)
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.0.0
