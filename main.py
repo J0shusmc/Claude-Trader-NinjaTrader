@@ -33,6 +33,12 @@ from src.risk_manager import EnterpriseRiskManager
 from src.health_monitor import HealthMonitor
 from src.performance_analytics import PerformanceAnalytics
 
+# Import profitability modules
+from src.enhanced_ai_agent import EnhancedTradingAgent
+from src.edge_filters import EdgeFilters, SetupQuality
+from src.exit_strategies import ExitManager, ExitPlan
+from src.ai_validator import AIDecisionValidator, AIConfidenceCalibrator
+
 
 class EnterpriseTradingOrchestrator:
     """
@@ -92,6 +98,18 @@ class EnterpriseTradingOrchestrator:
         # Performance Analytics
         self.performance = PerformanceAnalytics(self.config)
 
+        # Edge Filters (for setup quality scoring)
+        self.edge_filters = EdgeFilters(self.config._raw_config)
+
+        # Exit Manager (for intelligent profit taking)
+        self.exit_manager = ExitManager(self.config._raw_config)
+
+        # AI Decision Validator (validates all AI decisions)
+        self.ai_validator = AIDecisionValidator(self.config._raw_config)
+
+        # AI Confidence Calibrator (tracks AI accuracy)
+        self.confidence_calibrator = AIConfidenceCalibrator()
+
         # FVG Analyzer
         self.fvg_analyzer = FVGAnalyzer(
             min_gap_size=self.config.trading.min_gap_size,
@@ -127,15 +145,24 @@ class EnterpriseTradingOrchestrator:
                 name="claude_api"
             )
 
+            # Standard trading agent (backward compatible)
             self.trading_agent = TradingAgent(
                 self.config._raw_config,
                 api_key=api_key
             )
-            self.log.info("Trading agent initialized with Claude API")
+
+            # Enhanced trading agent with structured prompts
+            self.enhanced_agent = EnhancedTradingAgent(
+                api_key=api_key,
+                config=self.config._raw_config
+            )
+
+            self.log.info("Trading agents initialized (standard + enhanced)")
         else:
             self.trading_agent = None
+            self.enhanced_agent = None
             self.api_circuit_breaker = None
-            self.log.warning("No API key found - trading agent not available")
+            self.log.warning("No API key found - trading agents not available")
 
     def _handle_alert(self, alert_type: str, message: str):
         """Handle system alerts"""
@@ -291,13 +318,68 @@ class EnterpriseTradingOrchestrator:
                 if primary != 'NONE':
                     chosen_setup = decision_data['long_setup'] if primary == 'LONG' else decision_data['short_setup']
 
-                    # Pre-trade risk check
+                    # === VALIDATION LAYER 1: AI Decision Validator ===
+                    validation_result = self.ai_validator.validate_decision(
+                        ai_decision=decision_data,
+                        current_price=current_price,
+                        market_data=market_data,
+                        fvg_context=fvg_context
+                    )
+
+                    if not validation_result.is_valid:
+                        self.log.warning(f"AI decision REJECTED by validator: {validation_result.errors}")
+                        self.log.info(self.ai_validator.get_validation_summary(validation_result))
+                        return result
+
+                    if validation_result.warnings:
+                        self.log.warning(f"AI decision warnings: {validation_result.warnings}")
+
+                    # === VALIDATION LAYER 2: Edge Filters (Setup Quality) ===
+                    # Get nearest FVG for the chosen direction
+                    if primary == 'LONG':
+                        fvg_zone = fvg_context.get('nearest_bearish_fvg', {})
+                    else:
+                        fvg_zone = fvg_context.get('nearest_bullish_fvg', {})
+
+                    # Get recent bars for confirmation check
+                    recent_bars = []
+                    if len(historical_df) >= 5:
+                        for i in range(-5, 0):
+                            bar = historical_df.iloc[i]
+                            recent_bars.append({
+                                'Open': bar.get('Open', 0),
+                                'High': bar.get('High', 0),
+                                'Low': bar.get('Low', 0),
+                                'Close': bar.get('Close', 0)
+                            })
+
+                    should_take, setup_quality = self.edge_filters.should_take_trade(
+                        direction=primary,
+                        entry=chosen_setup['entry'],
+                        stop=chosen_setup['stop'],
+                        target=chosen_setup['target'],
+                        confidence=chosen_setup['confidence'],
+                        fvg_zone=fvg_zone,
+                        market_data=market_data,
+                        recent_bars=recent_bars
+                    )
+
+                    self.log.info(self.edge_filters.get_quality_summary(setup_quality))
+
+                    if not should_take:
+                        self.log.warning(f"Setup quality too low: Grade {setup_quality.grade} ({setup_quality.score}/100)")
+                        return result
+
+                    # === VALIDATION LAYER 3: Pre-trade Risk Check ===
+                    # Adjust position size based on setup quality
+                    adjusted_size = max(1, int(self.config.trading.position_size * setup_quality.adjusted_size))
+
                     allowed, reason = self.risk_manager.check_pre_trade(
                         direction=primary,
                         entry=chosen_setup['entry'],
                         stop=chosen_setup['stop'],
                         target=chosen_setup['target'],
-                        quantity=self.config.trading.position_size,
+                        quantity=adjusted_size,
                         confidence=chosen_setup['confidence']
                     )
 
@@ -305,7 +387,17 @@ class EnterpriseTradingOrchestrator:
                         self.log.warning(f"Trade rejected by risk manager: {reason}")
                         return result
 
-                    # Generate signal
+                    # === CREATE EXIT PLAN ===
+                    exit_plan = self.exit_manager.create_exit_plan(
+                        direction=primary,
+                        entry=chosen_setup['entry'],
+                        stop=chosen_setup['stop'],
+                        target=chosen_setup['target'],
+                        quantity=adjusted_size
+                    )
+                    self.log.info(self.exit_manager.get_exit_plan_summary(exit_plan, primary, chosen_setup['entry']))
+
+                    # Generate signal with enhanced data
                     signal = {
                         'decision': primary,
                         'entry': chosen_setup['entry'],
@@ -314,7 +406,17 @@ class EnterpriseTradingOrchestrator:
                         'risk_reward': chosen_setup['risk_reward'],
                         'confidence': chosen_setup['confidence'],
                         'reasoning': decision_data.get('overall_reasoning', ''),
-                        'setup_type': 'fvg_only'
+                        'setup_type': 'fvg_only',
+                        'setup_grade': setup_quality.grade,
+                        'setup_score': setup_quality.score,
+                        'adjusted_size': adjusted_size,
+                        'exit_plan': {
+                            'target_1': exit_plan.target_1,
+                            'target_2': exit_plan.target_2,
+                            'target_3': exit_plan.target_3,
+                            'breakeven_trigger': exit_plan.breakeven_trigger,
+                            'trailing_trigger': exit_plan.trailing_trigger
+                        }
                     }
 
                     success = self.signal_generator.generate_signal(signal)
@@ -324,11 +426,12 @@ class EnterpriseTradingOrchestrator:
                         self.risk_manager.record_trade_entry(
                             trade_id=trade_id,
                             direction=primary,
-                            quantity=self.config.trading.position_size
+                            quantity=adjusted_size
                         )
                         self.analysis_manager.mark_trade_executed(primary)
                         self.health_monitor.record_trade()
 
+                        # Log comprehensive trade info
                         self.log.trade_signal(
                             direction=primary,
                             entry=chosen_setup['entry'],
@@ -336,6 +439,8 @@ class EnterpriseTradingOrchestrator:
                             target=chosen_setup['target'],
                             confidence=chosen_setup['confidence']
                         )
+                        self.log.info(f"Setup Grade: {setup_quality.grade} | Size: {adjusted_size} | "
+                                     f"Exit targets: T1={exit_plan.target_1:.2f}, T2={exit_plan.target_2:.2f}, T3={exit_plan.target_3:.2f}")
 
                 return result
 
