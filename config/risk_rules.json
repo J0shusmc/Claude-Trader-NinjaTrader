@@ -4,26 +4,45 @@
     "Stop loss must be between 15-50 points",
     "Minimum risk/reward ratio must be 3:1",
     "No trading after 3 consecutive losses",
-    "No trading after daily loss limit is hit",
+    "No trading after daily loss limit is hit (100 points)",
     "Maximum 5 trades per day",
-    "Position size must not exceed configured maximum",
-    "All trades must meet minimum confidence threshold"
+    "Position size must not exceed 10 contracts",
+    "All trades must meet minimum confidence threshold (65%)",
+    "Cool down period of 15 minutes after any loss",
+    "Maximum drawdown limit of 5%"
   ],
   "validation": {
     "check_before_signal": true,
     "log_violations": true,
     "halt_on_violation": true,
-    "alert_on_near_limits": true
+    "alert_on_near_limits": true,
+    "require_confirmation_above_threshold": false
   },
   "safety_thresholds": {
     "daily_loss_warning_pct": 0.8,
     "consecutive_loss_warning": 2,
-    "daily_trades_warning": 4
+    "daily_trades_warning": 4,
+    "drawdown_warning_pct": 0.7
   },
   "recovery_protocol": {
     "pause_after_max_losses": true,
     "pause_duration_minutes": 60,
     "require_manual_resume": true,
-    "reset_counters_daily": true
+    "reset_counters_daily": true,
+    "reduce_size_after_losses": true,
+    "size_reduction_percent": 50
+  },
+  "position_limits": {
+    "max_contracts_per_trade": 10,
+    "max_open_positions": 1,
+    "max_daily_volume": 50,
+    "max_overnight_positions": 0
+  },
+  "time_restrictions": {
+    "trading_start_time": "09:30",
+    "trading_end_time": "16:00",
+    "no_trade_before_news_minutes": 15,
+    "no_trade_after_news_minutes": 15,
+    "timezone": "America/New_York"
   }
 }
