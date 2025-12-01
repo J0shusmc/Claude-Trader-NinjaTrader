@@ -1,35 +1,32 @@
 {
-  "current_bar_index": 10,
-  "overall_bias": "bullish",
-  "waiting_for": "SETUP SIGNIFICANTLY IMPROVED - PRICE SURGED INTO ENTRY ZONE: Price rallied +66.00 points (25415.50 to 25481.50), moving dramatically closer to LONG entry zone. Distance decreased from 93.75 points to just 27.75 points. Price now within striking distance of bearish FVG at 25509-25550. Monitoring for final push into entry zone at 25512.00.",
+  "current_bar_index": 1,
+  "overall_bias": "bearish",
+  "waiting_for": "MAJOR REVERSAL CONFIRMED - Price dropped 98pts from 25520 to 25422, breaking below previous support. Short setup now ACTIVE with fresh bullish FVG below as target. Stochastic remains overbought (80.95) supporting continuation down.",
   "long_assessment": {
-    "status": "waiting",
-    "target_fvg": {
-      "zone_start": 25509.25,
-      "zone_end": 25550.5,
-      "size": 41.25,
-      "distance": 27.75,
-      "age": 0
-    },
-    "entry_plan": 25512.0,
-    "stop_plan": 25465.0,
-    "target_plan": 25545.0,
-    "risk_reward": 1.7,
-    "confidence": 0.82,
-    "reasoning": "SETUP SIGNIFICANTLY IMPROVED - STRONG MOMENTUM SURGE (Age: 5 bars): Price exploded +66.00 points this bar, closing at 25481.50 and dramatically reducing distance to entry zone from 93.75 to just 27.75 points. This is exactly the price action we were waiting for! Entry remains at 25512.00 (just above FVG lower bound at 25509.25) - now only 30.50 points away. Stop at 25465.00 provides 47pt buffer below entry. Target 25545.00 for 33pt gain = 1.70 R/R (well above 1.3:1 minimum). Stochastic increased from 69.06 to 75.17 (+6.11), confirming building momentum though approaching overbought territory. Strong uptrend structure remains intact (EMA21 > EMA75 > EMA150). EMA21 rose from 25335.43 to 25349.21 (+13.78), showing trend acceleration. FVG remains fresh (0 age bars). The +66 point surge validates our patience - price is now positioned for final push into entry zone. CONFIDENCE INCREASED from 0.68 to 0.82 due to strong momentum confirmation and proximity to entry. CONTINUING TO WAIT for price to reach 25512.00 entry level - we're very close now. This is a high-quality setup developing exactly as anticipated. Next bar could trigger entry if momentum continues.",
-    "setup_age_bars": 5
-  },
-  "short_assessment": {
     "status": "none",
-    "target_fvg": null,
+    "setup_type": null,
     "entry_plan": null,
     "stop_plan": null,
+    "raw_target": null,
     "target_plan": null,
     "risk_reward": null,
     "confidence": 0.0,
-    "reasoning": "NO SHORT SETUP: Price at 25481.50 is 157.25 points ABOVE the bullish FVG (25303.00-25324.25). Price just surged +66.00 points, showing strong bullish momentum - completely contradicts SHORT thesis. Strong uptrend structure remains intact (EMA21 > EMA75 > EMA150) with EMA21 accelerating higher (+13.78 points). Stochastic at 75.17 shows building bullish momentum, not bearish. Price would need to drop 157+ points to reach the bullish FVG zone for SHORT consideration. The powerful rally this bar reinforces bullish bias and eliminates any SHORT consideration. No valid SHORT opportunity exists."
+    "reasoning": "PREVIOUS LONG SETUP INVALIDATED - Price dropped 98pts from 25520 to 25422, moving AWAY from the bearish FVG target above (now 123pts away vs 109pts previously). The anticipated pullback materialized but turned into a significant reversal. NEW bearish FVG formed at 25509.25-25550.50 above, but price action shows strong rejection from that zone. Stochastic at 80.95 (still overbought) with downward momentum confirms bearish pressure. Price now 51pts above EMA21 (25371.08), suggesting further downside likely before any bounce attempt. The previous concern about 'chasing at potential local high' was validated - price has reversed sharply. NO LONG SETUP currently valid. Would need to see: (1) price stabilize and form base, (2) stochastic cool to <50 and turn upward, (3) bullish price action confirmation before considering long entries.",
+    "setup_age_bars": 2
+  },
+  "short_assessment": {
+    "status": "none",
+    "setup_type": "FVG_FILL",
+    "entry_plan": 25422.25,
+    "stop_plan": 25475.0,
+    "raw_target": 25303.0,
+    "target_plan": 25308.0,
+    "risk_reward": 2.16,
+    "confidence": 0.75,
+    "reasoning": "SETUP EVOLUTION CONFIRMED - Previous short setup anticipated this move perfectly. Price dropped 98pts from 25520 to 25422, validating the bearish reversal thesis. NEW FRESH BULLISH FVG formed at 25303.00-25324.25 (0 bars old), now 114pts below current price - this is our magnetic target. STRONG CONFLUENCE: (1) Stochastic remains overbought at 80.95 with sustained downward momentum - PERFECT alignment for continuation. (2) Price rejected from 25520 zone and broke below psychological level 25500, showing commitment to downside. (3) Fresh bullish FVG below acts as strong magnet for gap fill. (4) Price still 51pts above EMA21 (25371.08), providing room for mean reversion. RISK/REWARD: Entry 25422.25, Raw Target 25303.00, Final Target 25308.00 (with 5pt buffer) = 114.25pt profit potential. Stop 25475.00 (52.75pts above entry, positioned above previous resistance zone) = 2.16:1 R/R - EXCELLENT, well above 1.3:1 minimum. MOMENTUM CONFIRMATION: The 98pt drop in one bar shows strong bearish commitment. Stochastic maintaining overbought reading while price drops is classic bearish divergence pattern. PSYCHOLOGICAL LEVEL: Price now between 25400-25500 levels, with 25400 just 22pts below - likely to break through given momentum. STATUS: READY - All criteria exceeded. Fresh FVG target, excellent R/R (2.16:1), strong momentum alignment, and price action confirmation of reversal. This is the setup we were monitoring, now fully developed and tradeable.",
+    "setup_age_bars": 0
   },
   "bars_since_last_update": 0,
-  "bars_since_last_trade": 10,
-  "last_updated": "2025-11-28T12:00:30.312047"
+  "bars_since_last_trade": 0,
+  "last_updated": "2025-11-30T18:17:14.932062"
 }

@@ -63,7 +63,7 @@ class FVGAnalyzer:
 
     def calculate_distance(self, current_price: float, fvg: Dict, fvg_type: str) -> float:
         """
-        Calculate distance from current price to FVG entry point
+        Calculate distance from current price to FVG target (the gap to fill)
 
         Args:
             current_price: Current market price
@@ -71,18 +71,21 @@ class FVGAnalyzer:
             fvg_type: 'bullish' or 'bearish'
 
         Returns:
-            Distance in points (positive = price needs to go up, negative = down)
+            Distance in points (positive = target above, negative = target below)
         """
-        if fvg_type == 'bearish':
-            # For LONG: entry at bottom of bearish FVG
-            return fvg['bottom'] - current_price
-        else:  # bullish
-            # For SHORT: entry at top of bullish FVG
-            return fvg['top'] - current_price
+        if fvg_type == 'bullish':
+            # Bullish FVG (gap UP) leaves gap BELOW = SHORT opportunity (price drawn down to fill)
+            # Target: top of the gap (where price will fill from above)
+            return fvg['top'] - current_price  # negative = target is below
+        else:  # bearish
+            # Bearish FVG (gap DOWN) leaves gap ABOVE = LONG opportunity (price drawn up to fill)
+            # Target: bottom of the gap (where price will fill from below)
+            return fvg['bottom'] - current_price  # positive = target is above
 
     def find_nearest_fvgs(self, current_price: float, fvg_zones: Dict[str, List[Dict]]) -> Dict[str, Optional[Dict]]:
         """
         Find nearest bullish and bearish FVGs to current price
+        Only considers FVGs in the correct direction (targets price can move toward)
 
         Args:
             current_price: Current market price
@@ -96,31 +99,45 @@ class FVGAnalyzer:
             'nearest_bearish': None
         }
 
-        # Find nearest bullish FVG (for shorts)
+        # Find nearest bullish FVG BELOW current price (for SHORT setups)
+        # Bullish FVG = gap created by UP move, leaves gap BELOW
+        # Price will be drawn downward to fill the gap
         if fvg_zones['bullish']:
-            bullish_with_distance = [
-                {
-                    **fvg,
-                    'distance': self.calculate_distance(current_price, fvg, 'bullish'),
-                    'distance_abs': abs(self.calculate_distance(current_price, fvg, 'bullish'))
-                }
-                for fvg in fvg_zones['bullish']
+            bullish_below = [
+                fvg for fvg in fvg_zones['bullish']
+                if fvg['top'] < current_price  # Gap must be BELOW current price
             ]
-            bullish_with_distance.sort(key=lambda x: x['distance_abs'])
-            result['nearest_bullish'] = bullish_with_distance[0]
+            if bullish_below:
+                bullish_with_distance = [
+                    {
+                        **fvg,
+                        'distance': self.calculate_distance(current_price, fvg, 'bullish'),
+                        'distance_abs': abs(self.calculate_distance(current_price, fvg, 'bullish'))
+                    }
+                    for fvg in bullish_below
+                ]
+                bullish_with_distance.sort(key=lambda x: x['distance_abs'])
+                result['nearest_bullish'] = bullish_with_distance[0]
 
-        # Find nearest bearish FVG (for longs)
+        # Find nearest bearish FVG ABOVE current price (for LONG setups)
+        # Bearish FVG = gap created by DOWN move, leaves gap ABOVE
+        # Price will be drawn upward to fill the gap
         if fvg_zones['bearish']:
-            bearish_with_distance = [
-                {
-                    **fvg,
-                    'distance': self.calculate_distance(current_price, fvg, 'bearish'),
-                    'distance_abs': abs(self.calculate_distance(current_price, fvg, 'bearish'))
-                }
-                for fvg in fvg_zones['bearish']
+            bearish_above = [
+                fvg for fvg in fvg_zones['bearish']
+                if fvg['bottom'] > current_price  # Gap must be ABOVE current price
             ]
-            bearish_with_distance.sort(key=lambda x: x['distance_abs'])
-            result['nearest_bearish'] = bearish_with_distance[0]
+            if bearish_above:
+                bearish_with_distance = [
+                    {
+                        **fvg,
+                        'distance': self.calculate_distance(current_price, fvg, 'bearish'),
+                        'distance_abs': abs(self.calculate_distance(current_price, fvg, 'bearish'))
+                    }
+                    for fvg in bearish_above
+                ]
+                bearish_with_distance.sort(key=lambda x: x['distance_abs'])
+                result['nearest_bearish'] = bearish_with_distance[0]
 
         return result
 
@@ -246,18 +263,18 @@ class FVGAnalyzer:
 
         if context['nearest_bullish_fvg']:
             fvg = context['nearest_bullish_fvg']
-            lines.append(f"\nNearest Bullish FVG (SHORT setup):")
+            lines.append(f"\nNearest Bullish FVG BELOW (SHORT setup - price drawn down to fill gap):")
             lines.append(f"  Zone: {fvg['bottom']:.2f} - {fvg['top']:.2f}")
             lines.append(f"  Size: {fvg['size']:.2f}pts")
-            lines.append(f"  Distance: {fvg['distance']:+.2f}pts")
+            lines.append(f"  Distance to target: {fvg['distance']:+.2f}pts")
             lines.append(f"  Age: {fvg.get('age_bars', 0)} bars")
 
         if context['nearest_bearish_fvg']:
             fvg = context['nearest_bearish_fvg']
-            lines.append(f"\nNearest Bearish FVG (LONG setup):")
+            lines.append(f"\nNearest Bearish FVG ABOVE (LONG setup - price drawn up to fill gap):")
             lines.append(f"  Zone: {fvg['bottom']:.2f} - {fvg['top']:.2f}")
             lines.append(f"  Size: {fvg['size']:.2f}pts")
-            lines.append(f"  Distance: {fvg['distance']:+.2f}pts")
+            lines.append(f"  Distance to target: {fvg['distance']:+.2f}pts")
             lines.append(f"  Age: {fvg.get('age_bars', 0)} bars")
 
         if context['price_in_zone']:

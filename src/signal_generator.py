@@ -95,6 +95,39 @@ class SignalGenerator:
             if target >= entry:
                 return False, f"SHORT target ({target}) must be below entry ({entry})"
 
+        # Validate 5pt buffer was applied correctly (if raw_target exists)
+        if 'raw_target' in decision and decision['raw_target'] is not None:
+            raw_target = decision['raw_target']
+
+            if decision['decision'] == 'LONG':
+                # LONG: Final target should be 5pts BELOW raw target
+                expected_target = raw_target - 5
+                if abs(target - expected_target) > 0.1:  # Allow 0.1pt tolerance
+                    return False, f"LONG buffer error: target ({target}) should be raw_target - 5 ({expected_target})"
+
+            elif decision['decision'] == 'SHORT':
+                # SHORT: Final target should be 5pts ABOVE raw target
+                expected_target = raw_target + 5
+                if abs(target - expected_target) > 0.1:  # Allow 0.1pt tolerance
+                    return False, f"SHORT buffer error: target ({target}) should be raw_target + 5 ({expected_target})"
+
+        # Calculate and validate R:R ratio with final target (after buffer)
+        risk = abs(entry - stop)
+        reward = abs(target - entry)
+
+        if risk == 0:
+            return False, "Risk cannot be zero (entry == stop)"
+
+        rr_ratio = reward / risk
+
+        # Minimum R:R requirement: 1.3:1
+        min_rr = 1.3
+        if rr_ratio < min_rr:
+            return False, f"R:R too low: {rr_ratio:.2f}:1 (minimum {min_rr}:1 required after 5pt buffer)"
+
+        logger.info(f"Validation passed: {decision['decision']} | R:R = {rr_ratio:.2f}:1 | "
+                    f"Risk: {risk:.2f}pts | Reward: {reward:.2f}pts")
+
         return True, ""
 
     def generate_signal(self, decision: Dict[str, Any], timestamp: datetime = None) -> bool:
@@ -164,10 +197,33 @@ class SignalGenerator:
         lines = []
         lines.append(f"=== TRADE SIGNAL GENERATED ===")
         lines.append(f"Direction: {decision['decision']}")
+
+        # Show setup type if available
+        if 'setup_type' in decision and decision['setup_type']:
+            lines.append(f"Setup Type: {decision['setup_type']}")
+
         lines.append(f"Entry: {entry:.2f}")
         lines.append(f"Stop Loss: {stop:.2f} ({risk:.2f}pts risk)")
-        lines.append(f"Target: {target:.2f} ({reward:.2f}pts reward)")
+
+        # Show raw target and buffer calculation if available
+        if 'raw_target' in decision and decision['raw_target'] is not None:
+            raw_target = decision['raw_target']
+            buffer_direction = "+" if decision['decision'] == 'SHORT' else "-"
+            lines.append(f"Raw Target: {raw_target:.2f}")
+            lines.append(f"Final Target: {target:.2f} ({raw_target:.2f} {buffer_direction} 5pt buffer)")
+        else:
+            lines.append(f"Target: {target:.2f} ({reward:.2f}pts reward)")
+
         lines.append(f"Risk/Reward: {rr_ratio:.2f}:1")
+
+        # Show confidence if available
+        if 'confidence' in decision:
+            lines.append(f"Confidence: {decision['confidence']:.0%}")
+
+        # Show reasoning if available
+        if 'reasoning' in decision and decision['reasoning']:
+            lines.append(f"\nReasoning: {decision['reasoning']}")
+
         lines.append(f"\nSignal written to: {self.output_file}")
 
         return "\n".join(lines)

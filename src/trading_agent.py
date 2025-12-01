@@ -8,7 +8,8 @@ import logging
 from typing import Dict, Optional, Any
 from datetime import datetime
 import os
-from anthropic import Anthropic
+import time
+from anthropic import Anthropic, APIError
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,93 @@ class TradingAgent:
 
         logger.info(f"TradingAgent initialized (model={self.model}, min_rr={self.min_risk_reward})")
 
+    def _find_psychological_levels(self, current_price: float, interval: int = 100) -> Dict[str, float]:
+        """
+        Find nearest psychological levels above and below current price
+
+        Args:
+            current_price: Current market price
+            interval: Level interval (default: 100 points)
+
+        Returns:
+            Dict with 'above' and 'below' levels
+        """
+        # Round to nearest level
+        nearest_level = round(current_price / interval) * interval
+
+        if current_price >= nearest_level:
+            level_above = nearest_level + interval
+            level_below = nearest_level
+        else:
+            level_above = nearest_level
+            level_below = nearest_level - interval
+
+        return {
+            'above': level_above,
+            'below': level_below
+        }
+
+    def query_claude_with_retry(self, prompt: str, max_retries: int = 5) -> Dict[str, Any]:
+        """
+        Query Claude API with exponential backoff retry logic
+
+        Args:
+            prompt: The prompt to send
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            API response or raises exception after all retries
+        """
+        base_delay = 2  # Start with 2 second delay
+
+        for attempt in range(max_retries):
+            try:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=2000,
+                    temperature=0.3,
+                    messages=[{
+                        "role": "user",
+                        "content": prompt
+                    }]
+                )
+                return response
+
+            except APIError as e:
+                error_message = str(e)
+
+                # Check if it's an overload error (529) or rate limit
+                is_retryable = (
+                    'overloaded' in error_message.lower() or
+                    '529' in error_message or
+                    'rate_limit' in error_message.lower() or
+                    '429' in error_message
+                )
+
+                if is_retryable and attempt < max_retries - 1:
+                    # Calculate exponential backoff delay
+                    delay = base_delay * (2 ** attempt)
+
+                    logger.warning(f"API Error (attempt {attempt + 1}/{max_retries}): {error_message}")
+                    logger.warning(f"Retrying in {delay} seconds...")
+
+                    # Show user-friendly message
+                    print(f"\n[WAIT] API temporarily overloaded. Retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+
+                    time.sleep(delay)
+                else:
+                    # Last attempt or non-retryable error
+                    logger.error(f"API Error (final attempt): {error_message}")
+                    raise
+
+            except Exception as e:
+                # Non-API errors should not be retried
+                logger.error(f"Unexpected error querying Claude: {e}")
+                raise
+
+        # Should never reach here, but just in case
+        raise Exception("Max retries exceeded")
+
     def build_prompt(
         self,
         fvg_context: Dict[str, Any],
@@ -71,6 +159,45 @@ YOUR TRADING PHILOSOPHY:
 - Maintain continuity in your analysis across bars
 - Update your assessment incrementally based on what changed
 - Track setups over multiple bars as they develop
+
+TRADING INFORMATION AVAILABLE:
+===============================
+You have access to multiple sources of information to identify high-probability setups.
+Use ALL available data to find the best trade opportunity.
+
+1. FAIR VALUE GAPS (FVGs) - Price imbalances that attract fills
+   - Bullish FVG BELOW = SHORT opportunity (price drawn down to fill gap)
+   - Bearish FVG ABOVE = LONG opportunity (price drawn up to fill gap)
+
+2. EMA STRUCTURE - Trend identification and dynamic support/resistance
+   - EMA21, EMA75, EMA150 alignment shows trend strength
+   - EMAs act as support in uptrends, resistance in downtrends
+   - Pullbacks to EMAs offer entry opportunities
+
+3. STOCHASTIC MOMENTUM - Overbought/oversold and momentum direction
+   - >80 = Overbought (potential reversal or continuation)
+   - <20 = Oversold (potential reversal or continuation)
+   - Direction shows momentum alignment
+
+4. PSYCHOLOGICAL LEVELS (EMS) - Round numbers attract price
+   - 100-point intervals (e.g., 25500, 25600)
+   - Act as magnets, support, and resistance
+
+AVAILABLE SETUP TYPES:
+======================
+1. FVG_FILL - Trading to fill a fair value gap
+2. EMA_BOUNCE - Pullback to EMA support/resistance
+3. MOMENTUM - Strong directional move with confluence
+4. LEVEL_TRADE - Break or rejection at psychological level
+5. COUNTER_TREND - Mean reversion from extreme conditions
+
+UNIVERSAL TARGET BUFFER RULE:
+=============================
+For ALL trades, apply 5-point buffer to avoid needing perfect precision:
+- LONG trades: Final Target = Raw Target - 5 points
+- SHORT trades: Final Target = Raw Target + 5 points
+
+This accounts for spread/slippage and protects against stop-hunting at exact levels.
 
 """
 
@@ -109,72 +236,112 @@ Price: {fvg_context['current_price']:.2f}
 FAIR VALUE GAPS:
 """
 
-        # Add bullish FVG info
+        # Add bullish FVG info (SHORT opportunity)
         if fvg_context.get('nearest_bullish_fvg'):
             fvg = fvg_context['nearest_bullish_fvg']
+            raw_target = fvg['bottom']  # Bottom of gap
+            final_target = raw_target + 5  # Add 5pt buffer for SHORT
             prompt += f"""
-Nearest Bullish FVG (SHORT opportunity):
+Nearest Bullish FVG BELOW (SHORT opportunity - FVG_FILL setup):
   Zone: {fvg['bottom']:.2f} - {fvg['top']:.2f}
   Size: {fvg['size']:.2f} points
-  Distance: {fvg['distance']:+.2f} points
   Age: {fvg.get('age_bars', 0)} bars
+
+  Raw Target: {raw_target:.2f} (bottom of gap)
+  Final Target: {final_target:.2f} (bottom + 5pt buffer)
+  Distance: {final_target - fvg_context['current_price']:.2f} points
+
+  Setup Idea: Enter SHORT, ride price DOWN to fill gap
+  This gap formed when price jumped UP, leaving unfilled space below.
 """
         else:
-            prompt += "\nNo bullish FVGs within quality criteria\n"
+            prompt += "\nNo bullish FVGs BELOW current price\n"
 
-        # Add bearish FVG info
+        # Add bearish FVG info (LONG opportunity)
         if fvg_context.get('nearest_bearish_fvg'):
             fvg = fvg_context['nearest_bearish_fvg']
+            raw_target = fvg['top']  # Top of gap
+            final_target = raw_target - 5  # Subtract 5pt buffer for LONG
             prompt += f"""
-Nearest Bearish FVG (LONG opportunity):
+Nearest Bearish FVG ABOVE (LONG opportunity - FVG_FILL setup):
   Zone: {fvg['bottom']:.2f} - {fvg['top']:.2f}
   Size: {fvg['size']:.2f} points
-  Distance: {fvg['distance']:+.2f} points
   Age: {fvg.get('age_bars', 0)} bars
+
+  Raw Target: {raw_target:.2f} (top of gap)
+  Final Target: {final_target:.2f} (top - 5pt buffer)
+  Distance: {final_target - fvg_context['current_price']:.2f} points
+
+  Setup Idea: Enter LONG, ride price UP to fill gap
+  This gap formed when price dropped DOWN, leaving unfilled space above.
 """
         else:
-            prompt += "\nNo bearish FVGs within quality criteria\n"
+            prompt += "\nNo bearish FVGs ABOVE current price\n"
 
         # Add EMA trend analysis
         prompt += f"""
-EMA TREND ANALYSIS:
-EMA21:  {market_data.get('ema21', 0):.2f}
-EMA75:  {market_data.get('ema75', 0):.2f}
-EMA150: {market_data.get('ema150', 0):.2f}
+EMA STRUCTURE & POTENTIAL SETUPS:
+==================================
+Current Price: {fvg_context['current_price']:.2f}
+EMA21:  {market_data.get('ema21', 0):.2f} (distance: {fvg_context['current_price'] - market_data.get('ema21', 0):+.2f})
+EMA75:  {market_data.get('ema75', 0):.2f} (distance: {fvg_context['current_price'] - market_data.get('ema75', 0):+.2f})
+EMA150: {market_data.get('ema150', 0):.2f} (distance: {fvg_context['current_price'] - market_data.get('ema150', 0):+.2f})
 
-Trend Alignment:
+Trend & Setup Opportunities:
 """
+        current_price = fvg_context['current_price']
         ema21 = market_data.get('ema21', 0)
         ema75 = market_data.get('ema75', 0)
         ema150 = market_data.get('ema150', 0)
 
         if ema21 > ema75 > ema150:
             prompt += "  Strong UPTREND (EMA21 > EMA75 > EMA150)\n"
+            if current_price > ema21:
+                prompt += f"  EMA_BOUNCE setup: LONG on pullback to EMA21 @ {ema21:.2f}\n"
         elif ema21 < ema75 < ema150:
             prompt += "  Strong DOWNTREND (EMA21 < EMA75 < EMA150)\n"
+            if current_price < ema21:
+                prompt += f"  EMA_BOUNCE setup: SHORT on bounce to EMA21 @ {ema21:.2f}\n"
         elif ema21 > ema75:
             prompt += "  Weak uptrend (EMA21 > EMA75)\n"
         elif ema21 < ema75:
             prompt += "  Weak downtrend (EMA21 < EMA75)\n"
         else:
-            prompt += "  Neutral/Choppy\n"
+            prompt += "  Neutral/Choppy - Avoid trend trades\n"
 
-        # Add Stochastic momentum
+        # Add Stochastic momentum with setup ideas
         stoch = market_data.get('stochastic', 50)
         prompt += f"""
-MOMENTUM INDICATOR:
+MOMENTUM INDICATOR & SETUPS:
+=============================
 Stochastic: {stoch:.2f}
 """
         if stoch < 20:
-            prompt += "  Status: OVERSOLD - Potential bounce/reversal up\n"
+            prompt += "  OVERSOLD - Potential COUNTER_TREND long (mean reversion)\n"
         elif stoch > 80:
-            prompt += "  Status: OVERBOUGHT - Potential pullback/reversal down\n"
+            prompt += "  OVERBOUGHT - Potential COUNTER_TREND short (mean reversion)\n"
         elif stoch < 40:
-            prompt += "  Status: Below midpoint - Building upward momentum\n"
+            prompt += "  Below midpoint - Can support MOMENTUM long if trending up\n"
         elif stoch > 60:
-            prompt += "  Status: Above midpoint - Building downward momentum\n"
+            prompt += "  Above midpoint - Can support MOMENTUM short if trending down\n"
         else:
-            prompt += "  Status: Neutral zone\n"
+            prompt += "  Neutral zone\n"
+
+        # Add psychological level analysis
+        nearest_levels = self._find_psychological_levels(current_price)
+        prompt += f"""
+PSYCHOLOGICAL LEVELS (EMS):
+============================
+Current Price: {current_price:.2f}
+Nearest Level Above: {nearest_levels['above']} ({nearest_levels['above'] - current_price:+.2f}pts)
+Nearest Level Below: {nearest_levels['below']} ({nearest_levels['below'] - current_price:+.2f}pts)
+
+LEVEL_TRADE opportunities:
+  - Break above {nearest_levels['above']} with retest (LONG continuation)
+  - Rejection at {nearest_levels['above']} (SHORT reversal)
+  - Break below {nearest_levels['below']} with retest (SHORT continuation)
+  - Bounce at {nearest_levels['below']} (LONG reversal)
+"""
 
         # Add memory context if available
         if memory_context:
@@ -210,16 +377,14 @@ IMPORTANT: If you don't see a quality setup, that's COMPLETELY ACCEPTABLE.
 For EACH assessment (long and short):
 1. Determine status: "none", "waiting", or "ready"
 2. If status is NOT "none", provide:
-   - Entry price (targeting FVG zone)
-   - Stop loss placement:
-     * CRITICAL: Base stop size on TARGET DISTANCE, not tight FVG bounds
-     * Use 30-40% of target distance for stop (e.g., 100pt target = 35pt stop)
-     * Avoid tight stops that get stopped out on normal volatility
-     * Stop should allow room for price action while maintaining positive R/R
-   - Target price (FVG fill or key level)
-   - Risk/Reward ratio (minimum {self.min_risk_reward}:1)
+   - Setup Type: Choose ONE: FVG_FILL, EMA_BOUNCE, MOMENTUM, LEVEL_TRADE, or COUNTER_TREND
+   - Entry price: Current price or nearby entry level
+   - Raw Target: Your identified target level BEFORE buffer
+   - Final Target: Apply 5pt buffer (LONG: raw - 5, SHORT: raw + 5)
+   - Stop loss: 20-50 points based on setup and volatility
+   - Risk/Reward ratio: Using (Final Target - Entry) / (Entry - Stop), min {self.min_risk_reward}:1
    - Confidence level (0.0-1.0)
-   - Reasoning explaining the setup and what you're waiting for
+   - Reasoning: Explain setup type, why chosen, confluence factors
 3. If status is "none", explain why no setup exists
 
 Update Your Assessment Based On:
@@ -244,42 +409,46 @@ Respond in JSON format:
 
     "long_assessment": {{
         "status": "none" | "waiting" | "ready",
-        "target_fvg": <FVG dict if applicable, else null>,
+        "setup_type": "FVG_FILL" | "EMA_BOUNCE" | "MOMENTUM" | "LEVEL_TRADE" | "COUNTER_TREND" | null,
         "entry_plan": <price or null>,
         "stop_plan": <price or null>,
-        "target_plan": <price or null>,
-        "risk_reward": <ratio or null>,
+        "raw_target": <target before buffer or null>,
+        "target_plan": <final target WITH 5pt buffer applied or null>,
+        "risk_reward": <ratio calculated with final target or null>,
         "confidence": <0.0-1.0>,
-        "reasoning": "<detailed explanation of this assessment>"
+        "reasoning": "<explain setup type, confluence, why chosen>"
     }},
 
     "short_assessment": {{
         "status": "none" | "waiting" | "ready",
-        "target_fvg": <FVG dict if applicable, else null>,
+        "setup_type": "FVG_FILL" | "EMA_BOUNCE" | "MOMENTUM" | "LEVEL_TRADE" | "COUNTER_TREND" | null,
         "entry_plan": <price or null>,
         "stop_plan": <price or null>,
-        "target_plan": <price or null>,
-        "risk_reward": <ratio or null>,
+        "raw_target": <target before buffer or null>,
+        "target_plan": <final target WITH 5pt buffer applied or null>,
+        "risk_reward": <ratio calculated with final target or null>,
         "confidence": <0.0-1.0>,
-        "reasoning": "<detailed explanation of this assessment>"
+        "reasoning": "<explain setup type, confluence, why chosen>"
     }},
 
     "primary_decision": "LONG" | "SHORT" | "NONE",
     "overall_reasoning": "<incremental update: what changed from previous bar, should we trade or continue waiting>",
 
     "long_setup": {{
-        "entry": <price from long_assessment>,
-        "stop": <price from long_assessment>,
-        "target": <price from long_assessment>,
+        "setup_type": <from long_assessment>,
+        "entry": <entry_plan from long_assessment>,
+        "stop": <stop_plan from long_assessment>,
+        "target": <target_plan (WITH buffer) from long_assessment>,
         "risk_reward": <ratio from long_assessment>,
         "confidence": <confidence from long_assessment>,
         "reasoning": "<reasoning from long_assessment>"
     }},
 
     "short_setup": {{
-        "entry": <price from short_assessment>,
-        "stop": <price from short_assessment>,
-        "target": <price from short_assessment>,
+        "setup_type": <from short_assessment>,
+        "entry": <entry_plan from short_assessment>,
+        "stop": <stop_plan from short_assessment>,
+        "target": <target_plan (WITH buffer) from short_assessment>,
         "risk_reward": <ratio from short_assessment>,
         "confidence": <confidence from short_assessment>,
         "reasoning": "<reasoning from short_assessment>"
@@ -448,16 +617,8 @@ Only set primary_decision to LONG/SHORT if the corresponding assessment status i
             anim_thread = threading.Thread(target=animate_dots, daemon=True)
             anim_thread.start()
 
-            # Query Claude
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
-                temperature=0.3,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
+            # Query Claude with retry logic
+            response = self.query_claude_with_retry(prompt, max_retries=5)
 
             # Stop animation
             waiting = False

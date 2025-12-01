@@ -8,8 +8,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class FVGDisplay:
-    def __init__(self, instrument='NQ', historical_path='data/HistoricalData.csv', live_feed_path='data/LiveFeed.csv'):
-        self.instrument = instrument
+    def __init__(self, instrument=None, historical_path='data/HistoricalData.csv', live_feed_path='data/LiveFeed.csv'):
+        self.instrument = instrument  # Will be auto-detected from CSV if None
         self.historical_path = historical_path
         self.live_feed_path = live_feed_path
 
@@ -48,6 +48,12 @@ class FVGDisplay:
             df = pd.read_csv(self.historical_path)
             if df.empty:
                 return None
+
+            # Auto-detect instrument from CSV if not set
+            if self.instrument is None and 'Instrument' in df.columns:
+                # Get the most recent instrument name from the CSV
+                self.instrument = df['Instrument'].iloc[-1]
+                logger.info(f"Auto-detected instrument: {self.instrument}")
 
             df['DateTime'] = pd.to_datetime(df['DateTime'])
             df = df.sort_values('DateTime').reset_index(drop=True)
@@ -336,7 +342,8 @@ class FVGDisplay:
 
         # Build the entire display as a string buffer first
         lines = []
-        lines.append("            NQ FAIR VALUE GAPS")
+        instrument_display = self.instrument if self.instrument else "UNKNOWN"
+        lines.append(f"            {instrument_display} FAIR VALUE GAPS")
         lines.append("="*60)
         lines.append("")
 
@@ -347,16 +354,16 @@ class FVGDisplay:
             # Add distance to each FVG and sort by distance
             fvgs_with_distance = []
             for fvg in active_fvgs:
-                # Calculate distance to entry point
-                # Positive = price must go UP, Negative = price must go DOWN
+                # Calculate distance to TARGET (the gap to fill)
+                # Positive = target ABOVE, Negative = target BELOW
                 if fvg['type'] == 'bearish':
-                    # For LONG zones: entry at BOTTOM
-                    # Positive if price needs to rise to reach bottom
-                    distance = fvg['bottom'] - current_price
+                    # Bearish FVG BELOW = SHORT target (price drawn down)
+                    # Target: TOP of bearish gap
+                    distance = fvg['top'] - current_price  # negative = target below
                 else:  # bullish
-                    # For SHORT zones: entry at TOP
-                    # Negative if price needs to drop to reach top
-                    distance = fvg['top'] - current_price
+                    # Bullish FVG ABOVE = LONG target (price drawn up)
+                    # Target: BOTTOM of bullish gap
+                    distance = fvg['bottom'] - current_price  # positive = target above
 
                 fvgs_with_distance.append({
                     'fvg': fvg,
@@ -370,9 +377,10 @@ class FVGDisplay:
             bullish_sorted = [item for item in fvgs_with_distance if item['fvg']['type'] == 'bullish']
             bearish_sorted = [item for item in fvgs_with_distance if item['fvg']['type'] == 'bearish']
 
-            # Display BEARISH gaps (reversed - furthest first, closest to center last)
+            # Display BEARISH gaps ABOVE price (reversed - furthest first, closest to center last)
+            # BEARISH gaps BELOW = SHORT targets (price drawn down to fill)
             # Show only nearest 5
-            lines.append("   BEARISH GAPS (LONG)     Gap Size     Distance       ")
+            lines.append("   BEARISH GAPS BELOW (SHORT targets)     Gap Size     Distance       ")
             lines.append("-"*60)
             if bearish_sorted:
                 # Take only the 5 nearest bearish zones
@@ -381,39 +389,7 @@ class FVGDisplay:
                 for item in reversed(nearest_5_bearish):
                     fvg = item['fvg']
                     distance = item['distance']
-                    # Show BOTTOM first for bearish zones (price approaches from below)
-                    zone_range = f"{fvg['bottom']:.2f} - {fvg['top']:.2f}"
-                    gap_size = f"{fvg['gap_size']:.2f}pts"
-                    # Show signed distance with arrows (↑ = price needs to go up, ↓ = price needs to go down)
-                    if distance > 0:
-                        distance_str = f"↑ {distance:.2f}pts"
-                    else:
-                        distance_str = f"↓ {abs(distance):.2f}pts"
-
-                    # Check if price is currently in this zone
-                    price_in_zone = (current_price >= fvg['bottom'] and current_price <= fvg['top'])
-                    zone_annotation = "In Zone" if price_in_zone else ""
-
-                    lines.append(f"    {zone_range:<22} {gap_size:<12} {distance_str:<12}{zone_annotation}")
-            else:
-                lines.append("    No bearish gaps")
-
-            # Center line with time, instrument, and price
-            lines.append("")
-            time_str = datetime.now().strftime('%H:%M:%S')
-            center_line = f" {time_str} | Instrument: {self.instrument} | Current Price: {current_price:.2f}"
-            lines.append(center_line)
-            lines.append("")
-
-            # Display BULLISH gaps (top first - closest to price when looking for shorts)
-            # Show only nearest 5
-            if bullish_sorted:
-                # Take only the 5 nearest bullish zones
-                nearest_5_bullish = bullish_sorted[:5]
-                for item in nearest_5_bullish:
-                    fvg = item['fvg']
-                    distance = item['distance']
-                    # Show TOP first for bullish zones (price approaches from above)
+                    # Show TOP first (the target price for shorts filling the gap)
                     zone_range = f"{fvg['top']:.2f} - {fvg['bottom']:.2f}"
                     gap_size = f"{fvg['gap_size']:.2f}pts"
                     # Show signed distance with arrows (↑ = price needs to go up, ↓ = price needs to go down)
@@ -428,10 +404,44 @@ class FVGDisplay:
 
                     lines.append(f"    {zone_range:<22} {gap_size:<12} {distance_str:<12}{zone_annotation}")
             else:
-                lines.append("    No bullish gaps")
+                lines.append("    No bearish gaps below price")
+
+            # Center line with time, instrument, and price
+            lines.append("")
+            time_str = datetime.now().strftime('%H:%M:%S')
+            instrument_display = self.instrument if self.instrument else "UNKNOWN"
+            center_line = f" {time_str} | Instrument: {instrument_display} | Current Price: {current_price:.2f}"
+            lines.append(center_line)
+            lines.append("")
+
+            # Display BULLISH gaps ABOVE price (top first - closest to price)
+            # BULLISH gaps ABOVE = LONG targets (price drawn up to fill)
+            # Show only nearest 5
+            if bullish_sorted:
+                # Take only the 5 nearest bullish zones
+                nearest_5_bullish = bullish_sorted[:5]
+                for item in nearest_5_bullish:
+                    fvg = item['fvg']
+                    distance = item['distance']
+                    # Show BOTTOM first (the target price for longs filling the gap)
+                    zone_range = f"{fvg['bottom']:.2f} - {fvg['top']:.2f}"
+                    gap_size = f"{fvg['gap_size']:.2f}pts"
+                    # Show signed distance with arrows (↑ = price needs to go up, ↓ = price needs to go down)
+                    if distance > 0:
+                        distance_str = f"↑ {distance:.2f}pts"
+                    else:
+                        distance_str = f"↓ {abs(distance):.2f}pts"
+
+                    # Check if price is currently in this zone
+                    price_in_zone = (current_price >= fvg['bottom'] and current_price <= fvg['top'])
+                    zone_annotation = "In Zone" if price_in_zone else ""
+
+                    lines.append(f"    {zone_range:<22} {gap_size:<12} {distance_str:<12}{zone_annotation}")
+            else:
+                lines.append("    No bullish gaps above price")
 
             lines.append("-"*60)
-            lines.append("  BULLISH GAPS (SHORT)     Gap Size     Distance       ")
+            lines.append("  BULLISH GAPS ABOVE (LONG targets)     Gap Size     Distance       ")
         else:
             lines.append("\nNo active FVGs")
 
@@ -451,7 +461,8 @@ class FVGDisplay:
         self.load_historical_fvgs()
         logger.info("="*50)
 
-        logger.info(f"Displaying FVGs for {self.instrument}")
+        instrument_display = self.instrument if self.instrument else "auto-detecting..."
+        logger.info(f"Displaying FVGs for {instrument_display}")
         logger.info("Monitoring HistoricalData.csv for new hourly bars and FVGs...")
         logger.info("Monitoring LiveFeed.csv for real-time price updates...")
         logger.info("Display updates every second with live price data...")
@@ -522,6 +533,7 @@ class FVGDisplay:
             logger.info("FVG Display stopped")
 
 if __name__ == "__main__":
-    # Configure for NQ futures
-    display = FVGDisplay(instrument='NQ')
+    # Auto-detect instrument from HistoricalData.csv
+    # Or you can manually set: display = FVGDisplay(instrument='NQ')
+    display = FVGDisplay()  # instrument will be auto-detected
     display.run()

@@ -251,19 +251,21 @@ namespace NinjaTrader.NinjaScript.Strategies
 
 		private void ExecuteLongEntry()
 		{
-			// Place LIMIT order at entry price with SL and TP
-			EnterLongLimit(0, true, contractQuantity, signalEntryPrice, "CT_Long");
-			hasLimitOrder = true;
-			Print($"[SIGNAL] LONG LIMIT @ {signalEntryPrice:F2} ({contractQuantity} contracts)");
+			// Place MARKET order for immediate entry
+			EnterLong(0, contractQuantity, "CT_Long");
+			hasLimitOrder = false;  // Using market order, not limit
+			Print($"[SIGNAL] LONG MARKET ORDER ({contractQuantity} contracts)");
+			Print($"  Reference Entry: {signalEntryPrice:F2}");
 			Print($"  Target SL: {signalStopLoss:F2} | Target TP: {signalTakeProfit:F2}");
 		}
 
 		private void ExecuteShortEntry()
 		{
-			// Place LIMIT order at entry price with SL and TP
-			EnterShortLimit(0, true, contractQuantity, signalEntryPrice, "CT_Short");
-			hasLimitOrder = true;
-			Print($"[SIGNAL] SHORT LIMIT @ {signalEntryPrice:F2} ({contractQuantity} contracts)");
+			// Place MARKET order for immediate entry
+			EnterShort(0, contractQuantity, "CT_Short");
+			hasLimitOrder = false;  // Using market order, not limit
+			Print($"[SIGNAL] SHORT MARKET ORDER ({contractQuantity} contracts)");
+			Print($"  Reference Entry: {signalEntryPrice:F2}");
 			Print($"  Target SL: {signalStopLoss:F2} | Target TP: {signalTakeProfit:F2}");
 		}
 

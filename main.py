@@ -30,12 +30,16 @@ def setup_logging(log_level: str = "INFO", log_file: str = None):
     """Setup logging configuration"""
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-    handlers = [logging.StreamHandler(sys.stdout)]
+    # Configure stdout handler with UTF-8 encoding for Windows
+    import io
+    stdout_handler = logging.StreamHandler(io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace'))
+    handlers = [stdout_handler]
 
     if log_file:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
-        handlers.append(logging.FileHandler(log_dir / log_file))
+        # File handler with UTF-8 encoding
+        handlers.append(logging.FileHandler(log_dir / log_file, encoding='utf-8', errors='replace'))
 
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
@@ -188,6 +192,22 @@ class TradingOrchestrator:
                     # Get active FVGs
                     active_fvgs = [fvg for fvg in fvg_display.active_fvgs if not fvg.get('filled', False)]
 
+                    # Debug logging
+                    total_fvgs = len(fvg_display.active_fvgs)
+                    unfilled_fvgs = len(active_fvgs)
+                    bullish_count = len([f for f in active_fvgs if f['type'] == 'bullish'])
+                    bearish_count = len([f for f in active_fvgs if f['type'] == 'bearish'])
+
+                    logger.info(f"FVG Status: Total={total_fvgs}, Unfilled={unfilled_fvgs} (Bullish={bullish_count}, Bearish={bearish_count})")
+
+                    if active_fvgs:
+                        # Show details of each FVG
+                        logger.info("Active FVGs:")
+                        for i, fvg in enumerate(active_fvgs[:5], 1):  # Show first 5
+                            logger.info(f"  {i}. {fvg['type'].upper()}: {fvg['bottom']:.2f}-{fvg['top']:.2f} | "
+                                      f"Current Price: {current_price:.2f} | "
+                                      f"Relative: {'ABOVE' if fvg['bottom'] > current_price else 'BELOW' if fvg['top'] < current_price else 'AT'}")
+
                     if not active_fvgs:
                         logger.info("No active FVGs - waiting...")
                         time.sleep(5)
@@ -195,6 +215,10 @@ class TradingOrchestrator:
 
                     # Analyze market context
                     fvg_context = self.fvg_analyzer.analyze_market_context(current_price, active_fvgs)
+
+                    # Debug: Show filtering results
+                    logger.info(f"After filtering - Nearest Bullish: {fvg_context['nearest_bullish_fvg'] is not None}, "
+                              f"Nearest Bearish: {fvg_context['nearest_bearish_fvg'] is not None}")
 
                     # Get latest bar from historical data for EMA/Stochastic values
                     current_bar = historical_df.iloc[-1]
