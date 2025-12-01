@@ -87,7 +87,7 @@ class TradingAgent:
             try:
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=2000,
+                    max_tokens=8192,  # Increased to handle full JSON response with detailed reasoning
                     temperature=0.3,
                     messages=[{
                         "role": "user",
@@ -481,6 +481,28 @@ Only set primary_decision to LONG/SHORT if the corresponding assessment status i
                 text = text.split('```')[1].split('```')[0].strip()
 
             decision = json.loads(text)
+
+            # AUTO-CONVERT: If agent returned new format but not old format, convert automatically
+            if 'long_assessment' in decision and 'short_assessment' in decision:
+                # Convert assessments to setups for backward compatibility
+                if 'long_setup' not in decision:
+                    decision['long_setup'] = self._assessment_to_setup(decision['long_assessment'])
+                if 'short_setup' not in decision:
+                    decision['short_setup'] = self._assessment_to_setup(decision['short_assessment'])
+
+                # Set primary_decision based on assessment status
+                if 'primary_decision' not in decision:
+                    if decision['long_assessment'].get('status') == 'ready':
+                        decision['primary_decision'] = 'LONG'
+                    elif decision['short_assessment'].get('status') == 'ready':
+                        decision['primary_decision'] = 'SHORT'
+                    else:
+                        decision['primary_decision'] = 'NONE'
+
+                # Set overall_reasoning from waiting_for if missing
+                if 'overall_reasoning' not in decision:
+                    decision['overall_reasoning'] = decision.get('waiting_for', 'No reasoning provided')
+
             return decision
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse Claude response: {e}")
@@ -489,6 +511,19 @@ Only set primary_decision to LONG/SHORT if the corresponding assessment status i
         except Exception as e:
             logger.error(f"Unexpected error parsing response: {e}")
             return None
+
+    def _assessment_to_setup(self, assessment: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert assessment format to setup format for backward compatibility"""
+        return {
+            'setup_type': assessment.get('setup_type'),
+            'entry': assessment.get('entry_plan'),
+            'stop': assessment.get('stop_plan'),
+            'raw_target': assessment.get('raw_target'),  # Include for validation
+            'target': assessment.get('target_plan'),
+            'risk_reward': assessment.get('risk_reward'),
+            'confidence': assessment.get('confidence', 0.0),
+            'reasoning': assessment.get('reasoning', '')
+        }
 
     def validate_decision(self, decision: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
@@ -635,13 +670,18 @@ Only set primary_decision to LONG/SHORT if the corresponding assessment status i
             logger.info(response_text)
             logger.info("="*60)
 
-            # Wait 2 seconds before clearing screen
-            time.sleep(2)
+            # Wait 1 second before continuing
+            time.sleep(1)
 
             # Parse response
             decision = self.parse_claude_response(response_text)
 
             if not decision:
+                logger.error("="*60)
+                logger.error("PARSING FAILED - RAW RESPONSE:")
+                logger.error("="*60)
+                logger.error(response_text)
+                logger.error("="*60)
                 return {
                     'success': False,
                     'error': 'Failed to parse Claude response',
